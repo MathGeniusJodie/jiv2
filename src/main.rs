@@ -112,7 +112,7 @@ fn render_image(path: &PathBuf, args: &Args) -> Result<(), Box<dyn std::error::E
             let oklab_sqrt = srgb_to_oklab(r_avg.sqrt(), g_avg.sqrt(), b_avg.sqrt());
             let oklab_sat = (oklab_sqrt.0, oklab.1, oklab.2);
             let (r_avg, g_avg, b_avg) = oklab_to_srgb(
-                oklab_sat.0,
+                oklab_sqrt.0,
                 oklab_sat.1,
                 oklab_sat.2,
             );
@@ -172,7 +172,7 @@ fn render_image(path: &PathBuf, args: &Args) -> Result<(), Box<dyn std::error::E
             let braille_char = char::from_u32(0x2800 + byte_mask as u32).unwrap_or(' ');
             // ANSI escape: bold + truecolor foreground
             use std::fmt::Write as _;
-            write!(line, "\x1b[1;38;2;{};{};{}m{}\x1b[0m", r_ansi, g_ansi, b_ansi, braille_char).unwrap();
+            write!(line, "\x1b[1;38;2;{};{};{};48;2;0;0;0m{}\x1b[0m", r_ansi, g_ansi, b_ansi, braille_char).unwrap();
         }
         println!("{}", line);
     }
