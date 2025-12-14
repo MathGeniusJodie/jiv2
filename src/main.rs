@@ -15,10 +15,6 @@ struct Args {
     #[arg(short, long)]
     edges: bool,
 
-    /// Invert colors (useful for dark terminal themes)
-    #[arg(short, long)]
-    invert: bool,
-
     // optional width parameter
     // Specify the width of the output in characters
     // If not provided, the terminal width will be used.
@@ -200,11 +196,7 @@ fn oklab_to_linear(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
                     // adjust using l_diff
                     //let luma = (luma as f32 - (1.0-l_avg) * 255.0).clamp(0.0, 255.0) as u8;
 
-                    let is_on = if args.invert {
-                        luma < 128 as f32
-                    } else {
-                        luma > 128 as f32
-                    };
+                    let is_on = luma > 128 as f32;
 
                     if is_on {
                         byte_mask |= bit;
