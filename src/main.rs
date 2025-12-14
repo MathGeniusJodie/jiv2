@@ -1,6 +1,6 @@
 use clap::Parser;
 use crossterm::terminal;
-use image::{imageops::FilterType, GenericImageView, Pixel};
+use image::{imageops::FilterType, GenericImageView};
 use std::path::PathBuf;
 
 /// A CLI tool to display images in the terminal using Braille characters
@@ -95,25 +95,6 @@ fn oklab_to_linear(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
 }
 // --- End color space conversion functions ---
 
-/// Raises the luma (L) of an Oklab color as high as possible while remaining a valid sRGB color.
-/// Returns the new (L, a, b) tuple.
-fn maximize_oklab_luma_within_srgb(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
-    // Binary search for the highest L such that oklab_to_srgb(L, a, b) is in [0,1] for all channels
-    let mut low = l;
-    let mut high = 1.0;
-    let mut best = l;
-    for _ in 0..20 {
-        let mid = (low + high) * 0.5;
-        let (r, g, b_) = oklab_to_srgb(mid, a, b);
-        if r >= 0.0 && r <= 1.0 && g >= 0.0 && g <= 1.0 && b_ >= 0.0 && b_ <= 1.0 {
-            best = mid;
-            low = mid;
-        } else {
-            high = mid;
-        }
-    }
-    (best, a, b)
-}
     let args = Args::parse();
 
     // 1. Load the image
