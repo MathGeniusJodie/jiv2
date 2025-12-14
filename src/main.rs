@@ -1,4 +1,4 @@
-use clap::{Parser, error};
+use clap::Parser;
 use crossterm::terminal;
 use image::{imageops::FilterType, GenericImageView, Pixel};
 use std::path::PathBuf;
@@ -19,9 +19,12 @@ struct Args {
     #[arg(short, long)]
     invert: bool,
 
-    /// Threshold for binary conversion (0-255). Lower = more dots.
-    #[arg(short, long, default_value_t = 128)]
-    threshold: u8,
+    // optional width parameter
+    // Specify the width of the output in characters
+    // If not provided, the terminal width will be used.
+    // this value is in characters, not pixels
+    #[arg(short, long)]
+    width: Option<u32>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -123,12 +126,16 @@ fn maximize_oklab_luma_within_srgb(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
     // Braille characters are 2 pixels wide and 4 pixels tall.
     // We multiply terminal dimensions by these factors to get "virtual pixel" resolution.
     // We subtract 1 from height to leave room for the prompt line.
-    let target_width = (term_w as u32) * 2;
+    let mut target_width = (term_w as u32) * 2;
     let target_height = ((term_h as u32).saturating_sub(1)) * 4;
+
+    if args.width.is_some() {
+        target_width = args.width.unwrap() * 2;
+    }
 
     // 4. Resize image preserving aspect ratio
     // We use Lanczos3 for high-quality downscaling
-    let mut resized = img.resize(target_width, target_height, FilterType::Lanczos3);
+    let resized = img.resize(target_width, target_height, FilterType::Lanczos3);
 
     // 5. Convert to Grayscale (Luma8)
     let mut gray_image = resized.to_luma8();
@@ -176,10 +183,20 @@ fn maximize_oklab_luma_within_srgb(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
             let g_avg = g_total / count;
             let b_avg = b_total / count;
 
+            let oklab = srgb_to_oklab(r_avg, g_avg, b_avg);
+            let oklab_sqrt = srgb_to_oklab(r_avg.sqrt(), g_avg.sqrt(), b_avg.sqrt());
+            let oklab_sat = (oklab_sqrt.0, oklab.1, oklab.2);
+            let (r_avg, g_avg, b_avg) = oklab_to_srgb(
+                oklab_sat.0,
+                oklab_sat.1,
+                oklab_sat.2,
+            );
+
+
             // Convert to 0-255 sRGB for ANSI
-            let r_ansi = (r_avg.sqrt().clamp(0.0, 1.0) * 255.0).round() as u8;
-            let g_ansi = (g_avg.sqrt().clamp(0.0, 1.0) * 255.0).round() as u8;
-            let b_ansi = (b_avg.sqrt().clamp(0.0, 1.0) * 255.0).round() as u8;
+            let r_ansi = (r_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let g_ansi = (g_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let b_ansi = (b_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
 
             let mut byte_mask: u8 = 0;
 
@@ -203,9 +220,9 @@ fn maximize_oklab_luma_within_srgb(l: f32, a: f32, b: f32) -> (f32, f32, f32) {
                     //let luma = (luma as f32 - (1.0-l_avg) * 255.0).clamp(0.0, 255.0) as u8;
 
                     let is_on = if args.invert {
-                        luma < args.threshold as f32
+                        luma < 128 as f32
                     } else {
-                        luma > args.threshold as f32
+                        luma > 128 as f32
                     };
 
                     if is_on {
