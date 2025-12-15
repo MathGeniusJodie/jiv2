@@ -19,3 +19,7 @@ path = "src/quadrant.rs"
 [[bin]]
 name = "braille"
 path = "src/braille.rs"
+
+[[bin]]
+name = "octant"
+path = "src/octant.rs"

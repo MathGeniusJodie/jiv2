@@ -1,7 +1,6 @@
 # Jodie's Image Viewer 2 (jiv2)
 
-Thought of a better method to display images in terminal in color and using braille characters.
-As far as I know, this is the only terminal image viewer that does this. This is clearly better to me than any other method I've seen.
+Having fun, please use chafa instead of this project
 
 ## Usage
 
@@ -12,6 +11,8 @@ sextant path/to/image.jpg [--width <width>] [--edges]
 braille path/to/image.jpg [--width <width>] [--edges]
 # best compatibility method but worst resolution
 quadrant path/to/image.jpg [--width <width>] [--edges]
+# other braille method, will replace with actal octants when unicode support is better
+octant path/to/image.jpg [--width <width>] [--edges]
 ```
 
 - the edges flag enhances edges
