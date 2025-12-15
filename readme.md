@@ -6,7 +6,12 @@ As far as I know, this is the only terminal image viewer that does this. This is
 ## Usage
 
 ```bash
-jiv2 path/to/image.jpg [--width <width>] [--edges]
+# best looking method but bad compatibility
+sextant path/to/image.jpg [--width <width>] [--edges]
+# best resolution method but dotted look
+braille path/to/image.jpg [--width <width>] [--edges]
+# best compatibility method but worst resolution
+quadrant path/to/image.jpg [--width <width>] [--edges]
 ```
 
 - the edges flag enhances edges
