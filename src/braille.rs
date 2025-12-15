@@ -122,7 +122,7 @@ fn render_image(path: &PathBuf, args: &Args) -> Result<(), Box<dyn std::error::E
             let g_ansi = (g_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
             let b_ansi = (b_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
 
-            let mut byte_mask: u8 = 0;
+            let mut byte_mask: u8 = 0; 
 
             // Define Braille dot coordinates relative to (x, y)
             let coords = [
