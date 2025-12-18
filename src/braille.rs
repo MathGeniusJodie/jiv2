@@ -127,7 +127,7 @@ fn render_image(path: &PathBuf, args: &Args) -> Result<(), Box<dyn std::error::E
             let mut byte_mask: u8 = 0;
 
             let diff = max_luma.abs_diff(min_luma) as f32 / 255.0;
-            let bleh = 0.7 * (1.0 - diff) + 0.0 * diff;
+            let bleh = 0.8 * (1.0 - diff) + 0.5 * diff;
             //let bleh = 0.5 * (1.0 - diff) + 0.5 * diff;
             let blah = 1.0-bleh;
 
