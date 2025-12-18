@@ -89,88 +89,105 @@ fn render_image(path: &PathBuf, args: &Args) -> Result<(), Box<dyn std::error::E
         let mut line = String::new();
         
         for x in (0..width).step_by(2) {
-            // get average color for the 2x4 block
+            // Variables to track color averages and luma range
             let mut r_total: f32 = 0.0;
             let mut g_total: f32 = 0.0;
             let mut b_total: f32 = 0.0;
+            
+            let mut min_luma: u8 = 255;
+            let mut max_luma: u8 = 0;
+
             for dy in 0..4 {
                 for dx in 0..2 {
                     if x + dx < width && y + dy < height {
+                        // Color accumulation
                         let pixel = resized.get_pixel(x + dx, y + dy);
                         r_total += srgb_to_linear(pixel[0] as f32 / 255.0);
                         g_total += srgb_to_linear(pixel[1] as f32 / 255.0);
                         b_total += srgb_to_linear(pixel[2] as f32 / 255.0);
+
+                        // Luma min/max tracking from the grayscale image
+                        let luma_pixel = gray_image.get_pixel(x + dx, y + dy)[0];
+                        if luma_pixel < min_luma { min_luma = luma_pixel; }
+                        if luma_pixel > max_luma { max_luma = luma_pixel; }
                     }
                 }
             }
+            
             let count = 8.0; // 2*4
             let r_avg= r_total / count;
             let g_avg = g_total / count;
             let b_avg = b_total / count;
 
-            let oklab = srgb_to_oklab(r_avg, g_avg, b_avg);
-            let oklab_sqrt = srgb_to_oklab(r_avg.sqrt(), g_avg.sqrt(), b_avg.sqrt());
-            let oklab_sat = (oklab_sqrt.0, oklab.1, oklab.2);
-            let (r_avg, g_avg, b_avg) = oklab_to_srgb(
-                oklab_sqrt.0,
-                oklab_sat.1,
-                oklab_sat.2,
-            );
+            // Check if the block is relatively flat (solid color or smooth gradient)
+            let diff = max_luma.abs_diff(min_luma);
+            let is_flat = diff < 20; // Threshold: adjusted to 30 for smoothness
 
-            // Convert to 0-255 sRGB for ANSI
-            let r_ansi = (r_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let g_ansi = (g_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let b_ansi = (b_avg.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let (r_final, g_final, b_final);
+            let mut byte_mask: u8 = 0;
 
-            let mut byte_mask: u8 = 0; 
+            let diff = max_luma.abs_diff(min_luma) as f32 / 255.0;
+            let bleh = 0.7 * (1.0 - diff) + 0.0 * diff;
+            //let bleh = 0.5 * (1.0 - diff) + 0.5 * diff;
+            let blah = 1.0-bleh;
 
-            // Define Braille dot coordinates relative to (x, y)
-            let coords = [
-                (0, 0, 0x01), (0, 1, 0x02), (0, 2, 0x04), (1, 0, 0x08),
-                (1, 1, 0x10), (1, 2, 0x20), (0, 3, 0x40), (1, 3, 0x80),
-            ];
 
-            for (dx, dy, bit) in coords {
-                if x + dx < width && y + dy < height {
-                    let pixel = gray_image.get_pixel(x + dx, y + dy);
-                    let luma = (pixel.0[0] as f32 / 255.0).sqrt() * 255.0 + error_diffusion[(y + dy) as usize][(x + dx) as usize];
+            
+                // RENDER DITHERED BLOCK (Original Logic)
 
-                    let is_on = luma > 128 as f32;
+                // 1. Color: Apply sqrt boost for sparse dots
+                let (r, g, b) = (r_avg.powf(bleh), g_avg.powf(bleh), b_avg.powf(bleh));
+                r_final = linear_to_srgb(r);
+                g_final = linear_to_srgb(g);
+                b_final = linear_to_srgb(b);
 
-                    if is_on {
-                        byte_mask |= bit;
-                    }
-                    // Error diffusion
-                    let error_value = luma as i16 - if is_on { 255 } else { 0 };
-                    // Distribute error to neighboring pixels
-                    let diffusion_coords = [
-                        // Extended error diffusion kernel (Stucki)
-                        (1, 0, 8.0 / 42.0),
-                        (2, 0, 4.0 / 42.0),
-                        (-2, 1, 2.0 / 42.0),
-                        (-1, 1, 4.0 / 42.0),
-                        (0, 1, 8.0 / 42.0),
-                        (1, 1, 4.0 / 42.0),
-                        (2, 1, 2.0 / 42.0),
-                        (-2, 2, 1.0 / 42.0),
-                        (-1, 2, 2.0 / 42.0),
-                        (0, 2, 4.0 / 42.0),
-                        (1, 2, 2.0 / 42.0),
-                        (2, 2, 1.0 / 42.0),
-                    ];
-                    for (dx_e, dy_e, factor) in diffusion_coords {
-                        let nx = x as i32 + dx as i32 + dx_e;
-                        let ny = y as i32 + dy as i32 + dy_e;
-                        if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
-                            error_diffusion[ny as usize][nx as usize] += error_value as f32 * factor;
+                // 2. Shape: Calculate Braille dots via error diffusion
+                let coords = [
+                    (0, 0, 0x01), (0, 1, 0x02), (0, 2, 0x04), (1, 0, 0x08),
+                    (1, 1, 0x10), (1, 2, 0x20), (0, 3, 0x40), (1, 3, 0x80),
+                ];
+
+                for (dx, dy, bit) in coords {
+                    if x + dx < width && y + dy < height {
+                        let pixel = gray_image.get_pixel(x + dx, y + dy);
+                        // Apply error diffusion from previous pixels
+                        let luma = srgb_to_linear(pixel.0[0] as f32 / 255.0).powf(blah) * 255.0 + error_diffusion[(y + dy) as usize][(x + dx) as usize];
+
+                        let is_on = luma > 128.0;
+
+                        if is_on {
+                            byte_mask |= bit;
+                        }
+                        
+                        // Calculate Error
+                        let error_value = luma as i16 - if is_on { 255 } else { 0 };
+                        
+                        // Distribute error to neighboring pixels (Stucki kernel)
+                        let diffusion_coords = [
+                            (1, 0, 8.0 / 42.0), (2, 0, 4.0 / 42.0),
+                            (-2, 1, 2.0 / 42.0), (-1, 1, 4.0 / 42.0), (0, 1, 8.0 / 42.0), (1, 1, 4.0 / 42.0), (2, 1, 2.0 / 42.0),
+                            (-2, 2, 1.0 / 42.0), (-1, 2, 2.0 / 42.0), (0, 2, 4.0 / 42.0), (1, 2, 2.0 / 42.0), (2, 2, 1.0 / 42.0),
+                        ];
+                        for (dx_e, dy_e, factor) in diffusion_coords {
+                            let nx = x as i32 + dx as i32 + dx_e;
+                            let ny = y as i32 + dy as i32 + dy_e;
+                            if nx >= 0 && nx < width as i32 && ny >= 0 && ny < height as i32 {
+                                error_diffusion[ny as usize][nx as usize] += error_value as f32 * factor;
+                            }
                         }
                     }
                 }
-            }
+            
+
+            // Convert calculated color to 0-255 sRGB for ANSI
+            let r_ansi = (r_final.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let g_ansi = (g_final.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let b_ansi = (b_final.clamp(0.0, 1.0) * 255.0).round() as u8;
 
             // Base Braille Unicode char is U+2800
             let braille_char = char::from_u32(0x2800 + byte_mask as u32).unwrap_or(' ');
-            // ANSI escape: bold + truecolor foreground
+            
+            // ANSI escape: bold + truecolor foreground + black background
             use std::fmt::Write as _;
             write!(line, "\x1b[1;38;2;{};{};{};48;2;0;0;0m{}\x1b[0m", r_ansi, g_ansi, b_ansi, braille_char).unwrap();
         }
